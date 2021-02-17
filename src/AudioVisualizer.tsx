@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Waveform from "./Waveform";
+
 import './visualizer.scss';
 
 const ZOOM_FACTOR = 1.1;
@@ -21,54 +23,6 @@ const useInterval = (callback, delay) => {
   }, [delay]);
 };
 
-const drawVisualizer = ({ canvas, rawData, sliceLength, sliceStart, playBar, selection }) => {
-  const height = canvas.height;
-  const width = canvas.width;
-  const canvasCtx = canvas.getContext('2d');
-
-  canvasCtx.lineWidth = 1;
-  canvasCtx.strokeStyle = '#000000';
-  canvasCtx.clearRect(0, 0, width, height);
-
-  canvasCtx.moveTo(0, height / 2);
-  const filterData = (rawData) => {
-    const samples = width * 5;
-    const blockSize = Math.floor(sliceLength / samples);
-    const filteredData = [];
-    for (let i = 0; i < samples; i++) {
-      const blockStart = blockSize * i;
-      let sum = 0;
-      for (let j = 0; j < blockSize; j++) {
-        sum += rawData[sliceStart + blockStart + j];
-      }
-      filteredData.push(sum / blockSize);
-    }
-    return filteredData;
-  };
-
-  const normalizeData = (filteredData) => {
-    const multiplier = Math.pow(Math.max(...filteredData), -1);
-    return filteredData.map((n) => n * multiplier);
-  };
-
-  const filteredData = normalizeData(filterData(rawData));
-  const sliceWidth = (width * 1.0) / filteredData.length;
-
-  let x = 0;
-  filteredData.forEach((item) => {
-    const y = ((item + 1) * height) / 2;
-    canvasCtx.beginPath();
-    if (Math.abs(y - height / 2) >= 1) {
-      canvasCtx.moveTo(x, height / 2);
-      canvasCtx.lineTo(x, y);
-    } else {
-      canvasCtx.moveTo(x, height / 2);
-      canvasCtx.lineTo(x, height / 2 + 1);
-    }
-    canvasCtx.stroke();
-    x += sliceWidth;
-  });
-};
 
 const drawPlayBar = ({ playBar, rawData, canvas, sliceStart, sliceLength }) => {
   const height = canvas.height;
@@ -111,7 +65,6 @@ const drawSelection = ({ canvas, selection, sliceStart, sliceLength, rawData }) 
 const AudioVisualizer = ({ audio, context }) => {
   const rawData = audio.getChannelData(0);
 
-  const waveformRef = useRef(null);
   const playbarRef = useRef(null);
   const selectionRef = useRef(null);
   const requestRef = useRef();
@@ -147,10 +100,6 @@ const AudioVisualizer = ({ audio, context }) => {
     const newPlayBar = startPoint / audio.duration;
     setPlayBar(newPlayBar);
   }, [startPoint])
-
-  useEffect(() => {
-    drawVisualizer({ canvas: waveformRef.current, rawData, playBar, sliceStart, sliceLength });
-  }, [sliceStart, sliceLength]);
 
   useEffect(() => {
     drawPlayBar({ canvas: playbarRef.current, playBar, sliceStart, sliceLength, rawData });
@@ -197,8 +146,8 @@ const AudioVisualizer = ({ audio, context }) => {
     setSelecting(true);
     const bounds = e.target.getBoundingClientRect();
     const pctClicked = (e.clientX - bounds.x) / bounds.width;
-    const approxSample = pctClicked * sliceLength + sliceStart;
-    setSelection({ start: Math.floor(approxSample) })
+    const start = pctClicked * sliceLength + sliceStart;
+    setSelection({ start })
     const offset = audio.duration * (approxSample / rawData.length);
     if (playing) {
       playFrom(offset);
@@ -211,8 +160,9 @@ const AudioVisualizer = ({ audio, context }) => {
     if (selecting) {
       const bounds = e.target.getBoundingClientRect();
       const pctClicked = (e.clientX - bounds.x) / bounds.width;
-      const approxSample = pctClicked * sliceLength + sliceStart;
-      setSelection({ ...selection, end: Math.floor(approxSample) })
+      const end = pctClicked * sliceLength + sliceStart;
+
+      setSelection({ ...selection, end })
     }
   }
 
@@ -265,12 +215,10 @@ const AudioVisualizer = ({ audio, context }) => {
           width={window.innerWidth}
           ref={selectionRef}
         />
-        <canvas
-          style={{ position: "absolute", top: 0, left: 0 }}
-          className="visualizer"
-          height={100}
-          width={window.innerWidth}
-          ref={waveformRef}
+        <Waveform
+          sliceStart={sliceStart}
+          sliceLength={sliceLength}
+          rawData={rawData}
         />
         <canvas
           style={{ position: "absolute", top: 0, left: 0 }}
