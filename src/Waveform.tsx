@@ -10,7 +10,6 @@ const Waveform = ({ sliceStart, sliceLength, rawData }) => {
   return (
     <canvas
       style={{ position: "absolute", top: 0, left: 0 }}
-      className="visualizer"
       height={100}
       width={window.innerWidth}
       ref={ref}
@@ -19,8 +18,7 @@ const Waveform = ({ sliceStart, sliceLength, rawData }) => {
 }
 
 const drawWaveform = ({ canvas, rawData, sliceLength, sliceStart }) => {
-  const height = canvas.height;
-  const width = canvas.width;
+  const { height, width } = canvas;
   const canvasCtx = canvas.getContext('2d');
 
   canvasCtx.lineWidth = 1;
