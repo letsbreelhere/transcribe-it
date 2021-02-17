@@ -127,11 +127,18 @@ const AudioVisualizer = ({ audio, context }) => {
   const [selecting, setSelecting] = useState(false);
 
   const playing = !!playTrack;
+  const looping = !!selection?.end;
+  const loopLength = looping ? audio.duration * Math.abs(selection.end - selection.start) / rawData.length : null;
 
   useInterval(() => {
     if (playing) {
       const curTime = startPoint + context.currentTime - startedAt;
-      const newPlayBar = curTime / audio.duration;
+      let newPlayBar
+      if (looping) {
+        newPlayBar = (startPoint + curTime % loopLength) / audio.duration;
+      } else {
+        newPlayBar = curTime / audio.duration;
+      }
       setPlayBar((prev) => newPlayBar);
     }
   }, 1);
@@ -176,6 +183,11 @@ const AudioVisualizer = ({ audio, context }) => {
     const audioTrack = context.createBufferSource();
     audioTrack.connect(context.destination);
     audioTrack.buffer = audio;
+    if (looping) {
+      audioTrack.loop = true;
+      audioTrack.loopStart = offset;
+      audioTrack.loopEnd = offset + loopLength;
+    }
     setPlayTrack(audioTrack);
     setStartedAt(context.currentTime);
     audioTrack.start(0, offset);
@@ -241,6 +253,9 @@ const AudioVisualizer = ({ audio, context }) => {
       </div>
       <div>
         {sliceLength}
+      </div>
+      <div>
+        {startPoint}, {playBar}
       </div>
       <div style={{ position: "relative" }}>
         <canvas
