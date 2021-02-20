@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import fs from 'fs';
 import AudioVisualizer from './AudioVisualizer';
 
-const App = () => {
+const App = ({ audioContext }) => {
   const [audio, setAudio] = useState(null);
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
   const onOpen = async e => {
     const file = e.target.files[0];

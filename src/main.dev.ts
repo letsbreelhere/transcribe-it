@@ -123,6 +123,8 @@ app.on('window-all-closed', () => {
   }
 });
 
+app.commandLine.appendSwitch('enable-features', 'AudioWorkletRealtimeThread');
+
 app.whenReady().then(createWindow).catch(console.log);
 
 app.on('activate', () => {

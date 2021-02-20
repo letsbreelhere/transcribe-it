@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Waveform from './Waveform';
 import PlayBar from './PlayBar';
 import Selection from './Selection';
+import { readFileSync } from 'fs';
 
 import './visualizer.scss';
 
@@ -63,10 +64,6 @@ const AudioVisualizer = ({ audio, context }) => {
     : null;
   const loopStart = audio.duration * (selection.start / rawData.length)
 
-  useEffect(() => {
-    //console.warn(relDuration);
-  }, [relDuration]);
-
   useInterval(() => {
     if (playing) {
       const cur = context.currentTime
@@ -80,11 +77,11 @@ const AudioVisualizer = ({ audio, context }) => {
     }
   }, 1);
 
-  const togglePlayback = () => {
+  const togglePlayback = async () => {
     if (playing) {
       pausePlayback();
     } else {
-      playFrom(relDuration);
+      await playFrom(relDuration);
     }
   };
 
@@ -93,18 +90,17 @@ const AudioVisualizer = ({ audio, context }) => {
     setPlayTrack(null);
   };
 
-  const playFrom = (offset) => {
+  const playFrom = async (offset) => {
     if (playing) {
       pausePlayback();
     }
     setRelDuration(offset);
     setTimeOfLastSample(context.currentTime)
     const audioTrack = context.createBufferSource();
-    audioTrack.connect(context.destination);
-    const stretched = doubleArray(rawData);
-    const stretchedAudio = new AudioBuffer({ length: audio.duration * audio.sampleRate, sampleRate: audio.sampleRate });
-    stretchedAudio.copyToChannel(stretched, 0);
-    audioTrack.buffer = stretchedAudio;
+    const stretchNode = new AudioWorkletNode(context, 'stretch-processor');
+    audioTrack.connect(stretchNode);
+    stretchNode.connect(context.destination);
+    audioTrack.buffer = audio;
     if (looping) {
       audioTrack.loop = true;
       audioTrack.loopStart = offset;
@@ -115,7 +111,7 @@ const AudioVisualizer = ({ audio, context }) => {
     audioTrack.start(0, offset);
   };
 
-  const onMouseDown = (e) => {
+  const onMouseDown = async (e) => {
     setSelecting(true);
     const bounds = e.target.getBoundingClientRect();
     const pctClicked = (e.clientX - bounds.x) / bounds.width;
@@ -123,7 +119,7 @@ const AudioVisualizer = ({ audio, context }) => {
     setSelection({ start });
     const offset = audio.duration * (start / rawData.length);
     if (playing) {
-      playFrom(offset);
+      await playFrom(offset);
     } else {
       setRelDuration(offset);
     }
