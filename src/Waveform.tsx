@@ -27,7 +27,7 @@ const drawWaveform = ({ canvas, rawData, sliceLength, sliceStart }) => {
 
   canvasCtx.moveTo(0, height / 2);
   const filterData = (rawData) => {
-    const samples = width*2;
+    const samples = width;
     const blockSize = Math.floor(sliceLength / samples);
     const filteredData = [];
     for (let i = 0; i < samples; i++) {
@@ -49,7 +49,7 @@ const drawWaveform = ({ canvas, rawData, sliceLength, sliceStart }) => {
   const filteredData = normalizeData(filterData(rawData));
   const sliceWidth = width / filteredData.length;
 
-  let x = 0;
+  let x = 0.5;
   filteredData.forEach((item) => {
     const y = item * height / 2;
     canvasCtx.beginPath();
