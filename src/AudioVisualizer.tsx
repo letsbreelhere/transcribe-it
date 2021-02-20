@@ -25,6 +25,18 @@ const useInterval = (callback, delay) => {
   }, [delay]);
 };
 
+const doubleArray = (array) => {
+  let result = [];
+  const chunkSize = 1024;
+  for (let i = 0; i < array.length; i += chunkSize) {
+    for (let j = 0; j < chunkSize; j++) {
+      result[i*2+j] = array[i+j];
+      result[i*2+chunkSize+j] = array[i+j];
+    }
+  }
+  return Float32Array.from(result);
+}
+
 const AudioVisualizer = ({ audio, context }) => {
   const rawData = audio.getChannelData(0);
 
@@ -33,13 +45,15 @@ const AudioVisualizer = ({ audio, context }) => {
   const previousTimeRef = useRef();
 
   const [playTrack, setPlayTrack] = useState(null);
-  const [startedAt, setStartedAt] = useState(null);
-  const [startPoint, setStartPoint] = useState(0);
-  const [playBar, setPlayBar] = useState(0);
   const [selection, setSelection] = useState({});
   const [sliceLength, setSliceLength] = useState(rawData.length);
   const [sliceStart, setSliceStart] = useState(0);
   const [selecting, setSelecting] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  const [startedAt, setStartedAt] = useState(null);
+  const [timeOfLastSample, setTimeOfLastSample] = useState(null);
+  const [relDuration, setRelDuration] = useState(0);
 
   const playing = !!playTrack;
   const looping = !!selection?.end;
@@ -47,37 +61,35 @@ const AudioVisualizer = ({ audio, context }) => {
     ? (audio.duration * Math.abs(selection.end - selection.start)) /
       rawData.length
     : null;
+  const loopStart = audio.duration * (selection.start / rawData.length)
+
+  useEffect(() => {
+    //console.warn(relDuration);
+  }, [relDuration]);
 
   useInterval(() => {
     if (playing) {
-      const curTime = startPoint + context.currentTime - startedAt;
-      let newPlayBar;
+      const cur = context.currentTime
+      setTimeOfLastSample(cur);
+      const timeSinceLastSample = cur - timeOfLastSample;
+      let newRelDuration = relDuration + timeSinceLastSample * playbackRate;
       if (looping) {
-        newPlayBar = (startPoint + (curTime % loopLength)) / audio.duration;
-      } else {
-        newPlayBar = curTime / audio.duration;
+        newRelDuration = loopStart + ((newRelDuration - loopStart) % loopLength);
       }
-      setPlayBar(newPlayBar);
+      setRelDuration(newRelDuration);
     }
   }, 1);
-
-  useEffect(() => {
-    const newPlayBar = startPoint / audio.duration;
-    setPlayBar(newPlayBar);
-  }, [startPoint]);
 
   const togglePlayback = () => {
     if (playing) {
       pausePlayback();
     } else {
-      playFrom(startPoint);
+      playFrom(relDuration);
     }
   };
 
   const pausePlayback = () => {
     playTrack.stop();
-    const pausedAt = context.currentTime;
-    setStartPoint(startPoint + pausedAt - startedAt);
     setPlayTrack(null);
   };
 
@@ -85,10 +97,14 @@ const AudioVisualizer = ({ audio, context }) => {
     if (playing) {
       pausePlayback();
     }
-    setStartPoint(offset);
+    setRelDuration(offset);
+    setTimeOfLastSample(context.currentTime)
     const audioTrack = context.createBufferSource();
     audioTrack.connect(context.destination);
-    audioTrack.buffer = audio;
+    const stretched = doubleArray(rawData);
+    const stretchedAudio = new AudioBuffer({ length: audio.duration * audio.sampleRate, sampleRate: audio.sampleRate });
+    stretchedAudio.copyToChannel(stretched, 0);
+    audioTrack.buffer = stretchedAudio;
     if (looping) {
       audioTrack.loop = true;
       audioTrack.loopStart = offset;
@@ -109,7 +125,7 @@ const AudioVisualizer = ({ audio, context }) => {
     if (playing) {
       playFrom(offset);
     } else {
-      setStartPoint(offset);
+      setRelDuration(offset);
     }
   };
 
@@ -157,11 +173,8 @@ const AudioVisualizer = ({ audio, context }) => {
   return (
     <>
       <button onMouseDown={togglePlayback}>{playing ? 'Pause' : 'Play'}</button>
-      <div>{sliceStart}</div>
-      <div>{sliceLength}</div>
-      <div>
-        {startPoint}, {playBar}
-      </div>
+      <input type="range" min={0.1} max={2} step={0.1} onChange={(e) => setPlaybackRate(e.target.value) } />
+      {playbackRate}
       <div style={{ position: 'relative' }}>
         <Selection
           start={selection.start}
@@ -176,7 +189,7 @@ const AudioVisualizer = ({ audio, context }) => {
           rawData={rawData}
         />
         <PlayBar
-          location={playBar}
+          location={relDuration / audio.duration}
           sliceStart={sliceStart}
           sliceLength={sliceLength}
           rawData={rawData}
