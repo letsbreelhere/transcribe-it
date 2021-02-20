@@ -27,16 +27,16 @@ const drawWaveform = ({ canvas, rawData, sliceLength, sliceStart }) => {
 
   canvasCtx.moveTo(0, height / 2);
   const filterData = (rawData) => {
-    const samples = width * 5;
+    const samples = width*2;
     const blockSize = Math.floor(sliceLength / samples);
     const filteredData = [];
     for (let i = 0; i < samples; i++) {
       const blockStart = blockSize * i;
       let sum = 0;
       for (let j = 0; j < blockSize; j++) {
-        sum += rawData[sliceStart + blockStart + j];
+        sum += Math.pow(rawData[sliceStart + blockStart + j],2);
       }
-      filteredData.push(sum / blockSize);
+      filteredData.push(Math.sqrt(sum / blockSize));
     }
     return filteredData;
   };
@@ -47,18 +47,18 @@ const drawWaveform = ({ canvas, rawData, sliceLength, sliceStart }) => {
   };
 
   const filteredData = normalizeData(filterData(rawData));
-  const sliceWidth = (width * 1.0) / filteredData.length;
+  const sliceWidth = width / filteredData.length;
 
   let x = 0;
   filteredData.forEach((item) => {
-    const y = ((item + 1) * height) / 2;
+    const y = item * height / 2;
     canvasCtx.beginPath();
     if (Math.abs(y - height / 2) >= 1) {
-      canvasCtx.moveTo(x, height / 2);
-      canvasCtx.lineTo(x, y);
+      canvasCtx.moveTo(x, height/2+y);
+      canvasCtx.lineTo(x, height/2-y);
     } else {
-      canvasCtx.moveTo(x, height / 2);
-      canvasCtx.lineTo(x, height / 2 + 1);
+      canvasCtx.moveTo(x, height/2-1);
+      canvasCtx.lineTo(x, height/2+1);
     }
     canvasCtx.stroke();
     x += sliceWidth;
