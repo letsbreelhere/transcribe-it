@@ -10,28 +10,34 @@ class RingBuffer {
 
   enq(values) {
     if (this.size - this.inBuffer < values.length) {
-      throw new Error('Buffer full');
+      throw new Error(
+        `Buffer full: ${this.size}, ${this.inBuffer}, ${values.length}`
+      );
     }
     this.inBuffer += values.length;
 
     values.forEach((value) => {
       this.buffer[this.writeCursor++ % this.size] = value;
     });
+
+    return this.inBuffer;
   }
 
   deq(n) {
     const res = [];
     for (let i = 0; i < n; i++) {
       if (this.inBuffer <= 0) {
-        throw new Error('Buffer empty');
+        throw new Error(`Buffer empty ${n}`);
       }
       res.push(this.buffer[this.readCursor++ % this.size]);
     }
+    this.inBuffer -= Math.min(this.inBuffer, n);
 
     return res;
   }
 }
 
+const frameSize = 512;
 class StretchProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [{ name: 'rate', defaultValue: 1 }];
@@ -39,34 +45,36 @@ class StretchProcessor extends AudioWorkletProcessor {
 
   constructor(...opts) {
     super(...opts);
-    this.lbuf = [];
-    this.rbuf = [];
+    this.ibufs = [new RingBuffer(frameSize * 2), new RingBuffer(frameSize * 2)];
+    this.obufs = [new RingBuffer(frameSize * 2), new RingBuffer(frameSize * 2)];
     this.ix = null;
   }
 
   process(inputs, outputs, parameters) {
-    const rate = 2;
-
-    if (this.ix === null) {
-      for (let i = 0; i < 128; i++) {
-        outputs[0][0][i] = inputs[0][0][i];
-        outputs[0][1][i] = inputs[0][1][i];
-      }
-      this.lbuf = Array(inputs[0][0]);
-      this.rbuf = Array(inputs[0][1]);
-      this.ix = 0;
-    } else {
-      for (let i = 0; i < 128; i++) {
-        outputs[0][0][i] = this.lbuf[this.ix + i];
-        outputs[0][1][i] = this.rbuf[this.ix + i];
-      }
-      this.ix += 128;
-      const writeIx = rate * this.ix;
-      for (let i = 0; i < rate * 128; i++) {
-        this.lbuf[writeIx + i] = inputs[0][0][i % 128];
-        this.rbuf[writeIx + i] = inputs[0][1][i % 128];
-      }
+    if (!inputs[0][0] || inputs[0][0].length === 0) {
+      return false;
     }
+
+    inputs[0].forEach((input, i) => {
+      this.ibufs[i].enq(input);
+    });
+
+    if (this.ibufs[0].inBuffer >= frameSize) {
+      // Stretch processing will happen here
+      this.ibufs.forEach((ibuf, i) => {
+        this.obufs[i].enq(ibuf.deq(frameSize));
+      });
+    }
+
+    if (this.obufs[0].inBuffer >= frameSize) {
+      outputs[0].forEach((_, i) => {
+        const toOutput = this.obufs[i].deq(128);
+        for (let j = 0; j < 128; j++) {
+          outputs[0][i][j] = toOutput[j];
+        }
+      });
+    }
+
     return true;
   }
 }
