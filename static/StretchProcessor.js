@@ -11,7 +11,9 @@ class RingBuffer {
   enq(values) {
     if (this.size - this.inBuffer < values.length) {
       throw new Error(
-        `Buffer full: ${this.size}, ${this.inBuffer}, ${values.length}`
+        `Buffer full: tried to enqueue ${values.length} but capacity is ${
+          this.size - this.inBuffer
+        }`
       );
     }
     this.inBuffer += values.length;
@@ -25,19 +27,22 @@ class RingBuffer {
 
   deq(n) {
     const res = [];
+    if (this.inBuffer < n) {
+      throw new Error(
+        `Buffer empty: tried to dequeue ${n} but only have ${this.inBuffer}`
+      );
+    }
     for (let i = 0; i < n; i++) {
-      if (this.inBuffer <= 0) {
-        throw new Error(`Buffer empty ${n}`);
-      }
       res.push(this.buffer[this.readCursor++ % this.size]);
     }
-    this.inBuffer -= Math.min(this.inBuffer, n);
+    this.inBuffer -= n;
 
     return res;
   }
 }
 
-const frameSize = 512;
+const frameSize = 1024;
+const rate = 2;
 class StretchProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [{ name: 'rate', defaultValue: 1 }];
@@ -46,33 +51,41 @@ class StretchProcessor extends AudioWorkletProcessor {
   constructor(...opts) {
     super(...opts);
     this.ibufs = [new RingBuffer(frameSize * 2), new RingBuffer(frameSize * 2)];
+    this.pbufs = [[], []];
     this.obufs = [new RingBuffer(frameSize * 2), new RingBuffer(frameSize * 2)];
-    this.ix = null;
+    this.writeIx = 0;
+    this.ix = 0;
   }
 
   process(inputs, outputs, parameters) {
-    if (!inputs[0][0] || inputs[0][0].length === 0) {
+    if (inputs[0][0]?.length === 0) {
       return false;
     }
 
+    // Enqueue this frame into input buffers
     inputs[0].forEach((input, i) => {
       this.ibufs[i].enq(input);
     });
 
+    // If input buffers are full, push them to grain buffer
     if (this.ibufs[0].inBuffer >= frameSize) {
-      // Stretch processing will happen here
       this.ibufs.forEach((ibuf, i) => {
-        this.obufs[i].enq(ibuf.deq(frameSize));
-      });
-    }
-
-    if (this.obufs[0].inBuffer >= frameSize) {
-      outputs[0].forEach((_, i) => {
-        const toOutput = this.obufs[i].deq(128);
-        for (let j = 0; j < 128; j++) {
-          outputs[0][i][j] = toOutput[j];
+        const dequeued = ibuf.deq(frameSize);
+        for (let j = 0; j < frameSize * rate; j++) {
+          this.pbufs[i][this.writeIx + j] = dequeued[j % frameSize];
         }
       });
+      this.writeIx += Math.floor(rate * frameSize);
+    }
+
+    // Output if the buffer is full
+    if (this.pbufs[0].length >= frameSize) {
+      outputs[0].forEach((_, i) => {
+        for (let j = 0; j < 128; j++) {
+          outputs[0][i][j] = this.pbufs[i][this.ix + j];
+        }
+      });
+      this.ix += 128;
     }
 
     return true;
