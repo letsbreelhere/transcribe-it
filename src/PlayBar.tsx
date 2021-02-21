@@ -27,7 +27,7 @@ const drawPlayBar = ({ location, rawData, canvas, sliceStart, sliceLength }) => 
   const approxSlice = location * rawData.length;
   let playBarX;
   if (approxSlice >= sliceStart && approxSlice <= sliceStart + sliceLength) {
-    playBarX = Math.floor(width * (approxSlice - sliceStart) / sliceLength);
+    playBarX = Math.floor(width * (approxSlice - sliceStart) / sliceLength) + 0.5;
   }
 
   if (playBarX) {

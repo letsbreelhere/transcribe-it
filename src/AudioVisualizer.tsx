@@ -6,7 +6,7 @@ import { readFileSync } from 'fs';
 
 import './visualizer.scss';
 
-const ZOOM_FACTOR = 1.1;
+const ZOOM_FACTOR = 1.2;
 
 const useInterval = (callback, delay) => {
   const savedCallback = useRef();
