@@ -5,7 +5,7 @@ const Waveform = ({ sliceStart, sliceLength, rawData }) => {
 
   useEffect(() => {
     drawWaveform({ canvas: ref.current, rawData, sliceStart, sliceLength });
-  }, [sliceStart, sliceLength, rawData, ref]);
+  }, [sliceStart, sliceLength, rawData, ref.current]);
 
   return (
     <canvas

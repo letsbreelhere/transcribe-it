@@ -38,7 +38,8 @@ class StretchProcessor extends AudioWorkletProcessor {
 
   constructor(...opts) {
     super(...opts)
-    this.buf = [];
+    this.lbuf = [];
+    this.rbuf = [];
     this.ix = null;
   }
 
@@ -48,19 +49,21 @@ class StretchProcessor extends AudioWorkletProcessor {
     if (this.ix === null) {
       for (let i = 0; i < 128; ++i) {
         outputs[0][0][i] = inputs[0][0][i];
-        outputs[0][1][i] = inputs[0][0][i];
+        outputs[0][1][i] = inputs[0][1][i];
       }
-      this.buf = Array(inputs[0][0]);
+      this.lbuf = Array(inputs[0][0]);
+      this.rbuf = Array(inputs[0][1]);
       this.ix = 0;
     } else {
       for (let i = 0; i < 128; ++i) {
-        outputs[0][0][i] = this.buf[this.ix+i];
-        outputs[0][1][i] = this.buf[this.ix+i];
+        outputs[0][0][i] = this.lbuf[this.ix+i];
+        outputs[0][1][i] = this.rbuf[this.ix+i];
       }
       this.ix += 128;
       const writeIx = rate*this.ix;
       for (let i = 0; i < rate*128; ++i) {
-        this.buf[writeIx + i] = inputs[0][0][i%128];
+        this.lbuf[writeIx + i] = inputs[0][0][i%128];
+        this.rbuf[writeIx + i] = inputs[0][1][i%128];
       }
     }
     return true;
