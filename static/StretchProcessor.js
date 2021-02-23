@@ -41,10 +41,15 @@ class RingBuffer {
   }
 }
 
-const frameSize = 1024;
-const rate = 2;
-
 const lerp = (a, b, p) => a * p + b*(1-p);
+
+const rate = 1 / 0.5;
+const frameSize = 1024;
+
+const hannWindow = [];
+for (let i = 0; i < frameSize; i++) {
+  hannWindow[i] = (25/46) * (1 - Math.cos((2 * Math.PI * i) / frameSize));
+}
 
 class StretchProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
@@ -72,6 +77,7 @@ class StretchProcessor extends AudioWorkletProcessor {
 
     // If input buffers are full, push them to grain buffer
     if (this.ibufs[0].inBuffer >= frameSize) {
+      const stretchedLength = Math.ceil(frameSize * rate);
       this.ibufs.forEach((ibuf, i) => {
         const dequeued = ibuf.deq(frameSize);
         for (let j = 0; j < frameSize * rate; j++) {
@@ -85,14 +91,14 @@ class StretchProcessor extends AudioWorkletProcessor {
           }
         }
       });
-      this.writeIx += Math.floor(rate * frameSize);
+      this.writeIx += stretchedLength;
     }
 
     // Output if the buffer is full
     if (this.pbufs[0].length >= frameSize) {
       outputs[0].forEach((_, i) => {
         for (let j = 0; j < 128; j++) {
-          outputs[0][i][j] = this.pbufs[i][this.ix + j];
+          outputs[0][i][j] = this.pbufs[i][this.ix + j] * hannWindow[j+frameSize/2-64];
         }
       });
       this.ix += 128;
