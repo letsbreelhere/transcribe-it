@@ -43,6 +43,9 @@ class RingBuffer {
 
 const frameSize = 1024;
 const rate = 2;
+
+const lerp = (a, b, p) => a * p + b*(1-p);
+
 class StretchProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [{ name: 'rate', defaultValue: 1 }];
@@ -72,7 +75,14 @@ class StretchProcessor extends AudioWorkletProcessor {
       this.ibufs.forEach((ibuf, i) => {
         const dequeued = ibuf.deq(frameSize);
         for (let j = 0; j < frameSize * rate; j++) {
-          this.pbufs[i][this.writeIx + j] = dequeued[j % frameSize];
+          if (j === 0 && this.writeIx > 0) {
+            const prev = this.pbufs[i][this.writeIx-1];
+            const cur = dequeued[j % frameSize];
+            this.pbufs[i][this.writeIx-1] = lerp(prev,cur,0.25);
+            this.pbufs[i][this.writeIx] = lerp(prev,cur,0.75);
+          } else {
+            this.pbufs[i][this.writeIx + j] = dequeued[j % frameSize];
+          }
         }
       });
       this.writeIx += Math.floor(rate * frameSize);
