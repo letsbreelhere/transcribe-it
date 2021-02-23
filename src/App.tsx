@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import fs from 'fs';
 import AudioVisualizer from './AudioVisualizer';
+import { Input } from '@material-ui/core';
 
 const App = ({ audioContext }) => {
   const [audio, setAudio] = useState(null);
@@ -15,7 +16,7 @@ const App = ({ audioContext }) => {
   return (
     <div className="App">
       <div className="controls">
-        <input onChange={onOpen} type="file" />
+        <Input onChange={onOpen} type="file" />
       </div>
       {audio ? <AudioVisualizer context={audioContext} audio={audio} /> : ''}
     </div>

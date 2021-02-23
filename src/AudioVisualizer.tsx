@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button, Input } from '@material-ui/core';
+
 import Waveform from './Waveform';
 import PlayBar from './PlayBar';
 import Selection from './Selection';
-import { readFileSync } from 'fs';
 
 import './visualizer.scss';
 
 const ZOOM_FACTOR = 1.2;
 
-const useInterval = (callback, delay) => {
-  const savedCallback = useRef();
+const useInterval = (callback: () => void, delay: number): void => {
+  const savedCallback: React.MutableRefObject<
+    (() => void) | undefined
+  > = useRef();
 
   useEffect(() => {
     savedCallback.current = callback;
@@ -17,85 +20,73 @@ const useInterval = (callback, delay) => {
 
   useEffect(() => {
     const tick = () => {
-      savedCallback.current();
+      if (savedCallback.current) savedCallback.current();
     };
     if (delay !== null) {
       const id = setInterval(tick, delay);
       return () => clearInterval(id);
     }
+    return undefined;
   }, [delay]);
 };
 
-const doubleArray = (array) => {
-  let result = [];
-  const chunkSize = 1024;
-  for (let i = 0; i < array.length; i += chunkSize) {
-    for (let j = 0; j < chunkSize; j++) {
-      result[i*2+j] = array[i+j];
-      result[i*2+chunkSize+j] = array[i+j];
-    }
-  }
-  return Float32Array.from(result);
+interface SelectionInterval {
+  start: number | undefined;
+  end: number | undefined;
 }
 
 const AudioVisualizer = ({ audio, context }) => {
-  const rawData = audio.getChannelData(0);
+  const rawData: Float32Array = audio.getChannelData(0);
 
-  const selectionRef = useRef(null);
-  const requestRef = useRef();
-  const previousTimeRef = useRef();
-
-  const [playTrack, setPlayTrack] = useState(null);
-  const [selection, setSelection] = useState({});
+  const [playBuffer, setPlayBuffer] = useState(null);
+  const [selection, setSelection]: [
+    SelectionInterval,
+    (s: SelectionInterval) => void
+  ] = useState({
+    start: undefined,
+    end: undefined,
+  });
   const [sliceLength, setSliceLength] = useState(rawData.length);
   const [sliceStart, setSliceStart] = useState(0);
   const [selecting, setSelecting] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
 
-  const [startedAt, setStartedAt] = useState(null);
   const [timeOfLastSample, setTimeOfLastSample] = useState(null);
   const [relDuration, setRelDuration] = useState(0);
 
-  const playing = !!playTrack;
-  const looping = !!selection?.end;
-  const loopLength = looping
-    ? (audio.duration * Math.abs(selection.end - selection.start)) /
+  const playing = !!playBuffer;
+  const looping = !!selection.end;
+  const loopLength: number | null = looping
+    ? (audio.duration * Math.abs(selection.end! - selection.start!)) /
       rawData.length
     : null;
-  const loopStart = audio.duration * (selection.start / rawData.length)
+  const loopStart: number = audio.duration * (selection.start! / rawData.length);
 
   useInterval(() => {
     if (playing) {
-      const cur = context.currentTime
+      const cur = context.currentTime;
       setTimeOfLastSample(cur);
       const timeSinceLastSample = cur - timeOfLastSample;
       let newRelDuration = relDuration + timeSinceLastSample * playbackRate;
       if (looping) {
-        newRelDuration = loopStart + ((newRelDuration - loopStart) % loopLength);
+        newRelDuration =
+          loopStart + ((newRelDuration - loopStart) % loopLength);
       }
       setRelDuration(newRelDuration);
     }
   }, 1);
 
-  const togglePlayback = async () => {
-    if (playing) {
-      pausePlayback();
-    } else {
-      await playFrom(relDuration);
-    }
-  };
-
   const pausePlayback = () => {
-    playTrack.stop();
-    setPlayTrack(null);
+    playBuffer?.stop();
+    setPlayBuffer(null);
   };
 
-  const playFrom = async (offset) => {
+  const playFrom = async (offset: number) => {
     if (playing) {
       pausePlayback();
     }
     setRelDuration(offset);
-    setTimeOfLastSample(context.currentTime)
+    setTimeOfLastSample(context.currentTime);
     const audioTrack = context.createBufferSource();
     const stretchNode = new AudioWorkletNode(context, 'stretch-processor');
     audioTrack.connect(stretchNode);
@@ -106,17 +97,24 @@ const AudioVisualizer = ({ audio, context }) => {
       audioTrack.loopStart = offset;
       audioTrack.loopEnd = offset + loopLength;
     }
-    setPlayTrack(audioTrack);
-    setStartedAt(context.currentTime);
+    setPlayBuffer(audioTrack);
     audioTrack.start(0, offset);
   };
 
-  const onMouseDown = async (e) => {
+  const togglePlayback = async () => {
+    if (playing) {
+      pausePlayback();
+    } else {
+      await playFrom(relDuration);
+    }
+  };
+
+  const onMouseDown = async (e: React.SyntheticEvent<EventTarget>) => {
     setSelecting(true);
     const bounds = e.target.getBoundingClientRect();
     const pctClicked = (e.clientX - bounds.x) / bounds.width;
     const start = pctClicked * sliceLength + sliceStart;
-    setSelection({ start });
+    setSelection({ start, end: undefined });
     const offset = audio.duration * (start / rawData.length);
     if (playing) {
       await playFrom(offset);
@@ -125,7 +123,7 @@ const AudioVisualizer = ({ audio, context }) => {
     }
   };
 
-  const onMouseMove = (e) => {
+  const onMouseMove = (e: React.SyntheticEvent<EventTarget>) => {
     if (selecting) {
       const bounds = e.target.getBoundingClientRect();
       const pctClicked = (e.clientX - bounds.x) / bounds.width;
@@ -135,14 +133,14 @@ const AudioVisualizer = ({ audio, context }) => {
     }
   };
 
-  const onMouseUp = (e) => {
+  const onMouseUp = () => {
     if (Math.abs(selection.end - selection.start) < 10) {
       setSelection({});
     }
     setSelecting(false);
   };
 
-  const onWheel = (e) => {
+  const onWheel = (e: React.SyntheticEvent<EventTarget>) => {
     const bounds = e.target.getBoundingClientRect();
     const wheelPct = (e.clientX - bounds.x) / bounds.width;
     const wheelX = Math.floor(wheelPct * sliceLength + sliceStart);
@@ -168,8 +166,16 @@ const AudioVisualizer = ({ audio, context }) => {
 
   return (
     <>
-      <button onMouseDown={togglePlayback}>{playing ? 'Pause' : 'Play'}</button>
-      <input type="range" min={0.1} max={2} step={0.1} onChange={(e) => setPlaybackRate(e.target.value) } />
+      <Button onMouseDown={togglePlayback}>{playing ? 'Pause' : 'Play'}</Button>
+      <Input
+        type="range"
+        min={0.1}
+        max={2}
+        step={0.1}
+        onChange={(e: React.SyntheticEvent<EventTarget>) =>
+          setPlaybackRate(e.target.value)
+        }
+      />
       {playbackRate}
       <div style={{ position: 'relative' }}>
         <Selection
